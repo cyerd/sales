@@ -1,101 +1,247 @@
-import Image from "next/image";
+// pages/index.js
+import { useEffect, useState } from "react";
+import axios from "axios";
+import dynamic from "next/dynamic";
+import Navbar from "../components/Navbar";
+
+// Dynamically import Chart.js (client-only)
+const Chart = dynamic(() => import("chart.js/auto"), { ssr: false });
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [records, setRecords] = useState([]);
+  const [formData, setFormData] = useState({
+    opening_mpesa: "",
+    opening_cash: "",
+    total_sales: "",
+    closing_mpesa: "",
+    closing_cash: "",
+    expenses: "",
+  });
+  const [message, setMessage] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  // Fetch records from the API
+  const fetchRecords = async () => {
+    try {
+      const res = await axios.post("/api/process", { action: "fetch_records" });
+      if (res.data.status === "success") {
+        setRecords(res.data.records);
+        updateChart(res.data.records);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Update the Chart.js graph
+  const updateChart = (records) => {
+    const ctx = document.getElementById("SalesChart").getContext("2d");
+    const labels = records.map(record => {
+      const date = new Date(record.date);
+      return `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}/${date.getFullYear().toString().slice(-2)} ${date
+        .getHours()
+        .toString()
+        .padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+    });
+    const data = records.map(record => record.total_sales);
+
+    if (window.SalesChartInstance) {
+      window.SalesChartInstance.destroy();
+    }
+    window.SalesChartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Daily Sales",
+          data,
+          borderColor: "rgba(75, 192, 192, 1)",
+          borderWidth: 2,
+          fill: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  };
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post("/api/process", { ...formData, action: "submit_form" });
+      if (res.data.status === "success") {
+        setMessage(res.data.message);
+        setFormData({
+          opening_mpesa: "",
+          opening_cash: "",
+          total_sales: "",
+          closing_mpesa: "",
+          closing_cash: "",
+          expenses: "",
+        });
+        fetchRecords();
+      } else {
+        setMessage(res.data.message);
+      }
+    } catch (error) {
+      setMessage("Error submitting form");
+    }
+  };
+
+  useEffect(() => {
+    fetchRecords();
+  }, []);
+
+  return (
+    <div>
+      <Navbar />
+      <div className="container mx-auto p-4">
+        <h1 className="text-3xl font-bold text-center my-4">Daily Financial Entry</h1>
+        {message && <p className="text-center text-green-600">{message}</p>}
+        <form onSubmit={handleSubmit} className="max-w-md mx-auto bg-white p-4 rounded shadow mb-8">
+          <div className="mb-4">
+            <label className="block mb-1">Opening Mpesa</label>
+            <input
+              type="number"
+              step="0.01"
+              name="opening_mpesa"
+              value={formData.opening_mpesa}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Opening Cash</label>
+            <input
+              type="number"
+              step="0.01"
+              name="opening_cash"
+              value={formData.opening_cash}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Total Sales</label>
+            <input
+              type="number"
+              step="0.01"
+              name="total_sales"
+              value={formData.total_sales}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Closing Mpesa</label>
+            <input
+              type="number"
+              step="0.01"
+              name="closing_mpesa"
+              value={formData.closing_mpesa}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Closing Cash</label>
+            <input
+              type="number"
+              step="0.01"
+              name="closing_cash"
+              value={formData.closing_cash}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Expenses</label>
+            <input
+              type="number"
+              step="0.01"
+              name="expenses"
+              value={formData.expenses}
+              onChange={handleChange}
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+          <button type="submit" className="w-full bg-blue-500 text-white rounded py-2 hover:bg-blue-600 transition">
+            Submit
+          </button>
+        </form>
+
+        <h2 className="text-2xl font-bold text-center my-4">Existing Records</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white">
+            <thead>
+              <tr>
+                <th className="px-4 py-2 border">Date</th>
+                <th className="px-4 py-2 border">Opening Mpesa</th>
+                <th className="px-4 py-2 border">Opening Cash</th>
+                <th className="px-4 py-2 border">Total Sales</th>
+                <th className="px-4 py-2 border">Closing Mpesa</th>
+                <th className="px-4 py-2 border">Closing Cash</th>
+                <th className="px-4 py-2 border">Expenses</th>
+                <th className="px-4 py-2 border">Expected</th>
+                <th className="px-4 py-2 border">Available</th>
+                <th className="px-4 py-2 border">Unreconciled</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.length > 0 ? (
+                records.map((record) => {
+                  const date = new Date(record.date);
+                  const formattedDate = `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth()+1).toString().padStart(2, "0")}/${date.getFullYear().toString().slice(-2)} ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
+                  return (
+                    <tr key={record._id}>
+                      <td className="px-4 py-2 border">{formattedDate}</td>
+                      <td className="px-4 py-2 border">{record.opening_mpesa}</td>
+                      <td className="px-4 py-2 border">{record.opening_cash}</td>
+                      <td className="px-4 py-2 border">{record.total_sales}</td>
+                      <td className="px-4 py-2 border">{record.closing_mpesa}</td>
+                      <td className="px-4 py-2 border">{record.closing_cash}</td>
+                      <td className="px-4 py-2 border">{record.expenses}</td>
+                      <td className="px-4 py-2 border" style={{ color: record.expected > 0 ? "green" : record.expected < 0 ? "red" : "orange" }}>
+                        {record.expected}
+                      </td>
+                      <td className="px-4 py-2 border" style={{ color: record.totalnow > 0 ? "green" : record.totalnow < 0 ? "red" : "orange" }}>
+                        {record.totalnow}
+                      </td>
+                      <td className="px-4 py-2 border" style={{ color: record.expectedDiff > 0 ? "red" : record.expectedDiff < 0 ? "blue" : "orange" }}>
+                        {record.expectedDiff}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="10" className="px-4 py-2 text-center">No records found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <h2 className="text-2xl font-bold text-center my-4">Daily Sales Graph</h2>
+        <div className="max-w-3xl mx-auto">
+          <canvas id="SalesChart" className="w-full"></canvas>
+        </div>
+      </div>
     </div>
   );
 }
